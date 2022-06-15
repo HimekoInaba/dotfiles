@@ -1,0 +1,5 @@
+export BASH_SILENCE_DEPRECATION_WARNING=1
+export EDITOR='vim'
+export CLICOLOR=1
+
+export PATH=$PATH:$HOME/bin
