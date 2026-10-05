@@ -1,5 +1,6 @@
--- Code review: diffview.nvim (IntelliJ Commit / Changes window with a side-by-side diff, branch vs base)
--- and octo.nvim (IntelliJ Pull Requests tool window, runs on the `gh` CLI). Octo's own keys use <localleader>.
+-- Code review: diffview.nvim (IntelliJ Commit / Changes window with a side-by-side diff, branch vs base),
+-- lua/pr_review (pull requests in that same diff view, with the review threads on their lines) and octo.nvim
+-- (the pull request list and a pull request's description and conversation). All on the `gh` CLI.
 local nerd = vim.g.have_nerd_font == true
 
 --- The remote's default branch (`origin/dev`), the base a branch is reviewed against
@@ -108,28 +109,75 @@ local function diffview_opts()
   end
   local panel = vim.list_slice(shared)
   table.insert(panel, { "n", "X", restore_after_confirm, { desc = "Roll back to the version on the left (asks first)" } })
+  -- Pull request keys (lua/pr_review). They are set in every diff view and say so when it is not one.
+  local function pr(action, ...)
+    local args = { ... }
+    return function()
+      require("pr_review")[action](unpack(args))
+    end
+  end
+  local review = {
+    { "n", "<localleader>vs", pr("submit"), { desc = "PR: submit review (approve / comment / request changes)" } },
+    { "n", "<localleader>vd", pr("discard"), { desc = "PR: discard my pending review" } },
+    { "n", "<localleader>vr", pr("refresh"), { desc = "PR: reload comments" } },
+    { "n", "<localleader>cl", pr("list"), { desc = "PR: list all comments" } },
+    { "n", "<localleader>pp", pr("description"), { desc = "PR: description and conversation" } },
+    { "n", "<localleader>pb", pr("browse"), { desc = "PR: open in the browser" } },
+  }
+  vim.list_extend(panel, review)
   -- Keys that diffview sets on a diffed file are deleted, not restored, when the view closes. Its default
   -- merge keys <leader>ca / co / ct / cT would take the LSP's Context Actions, Optimize Imports and
-  -- Type Hierarchy of that file with them, so the merge keys live under <localleader>.
+  -- Type Hierarchy of that file with them, so the merge keys live under <localleader>x, next to ]x and dx.
   local view = vim.list_slice(shared)
   for key, side in pairs({ o = "ours", t = "theirs", b = "base", a = "all" }) do
     vim.list_extend(view, {
       { "n", "<leader>c" .. key, false },
       { "n", "<leader>c" .. key:upper(), false },
-      { "n", "<localleader>c" .. key, actions.conflict_choose(side), { desc = "Conflict: choose " .. side } },
+      { "n", "<localleader>x" .. key, actions.conflict_choose(side), { desc = "Conflict: choose " .. side } },
       {
         "n",
-        "<localleader>c" .. key:upper(),
+        "<localleader>x" .. key:upper(),
         actions.conflict_choose_all(side),
         { desc = "Conflict: choose " .. side .. " in the whole file" },
       },
     })
   end
+  vim.list_extend(view, review)
+  vim.list_extend(view, {
+    { { "n", "x" }, "<localleader>ca", pr("comment"), { desc = "PR: comment on the line or selection" } },
+    { "n", "<localleader>rt", pr("toggle_resolved"), { desc = "PR: resolve / unresolve the comment thread" } },
+    { "n", "]t", pr("jump", 1), { desc = "PR: next comment" } },
+    { "n", "[t", pr("jump", -1), { desc = "PR: previous comment" } },
+    {
+      "n",
+      "<CR>",
+      function()
+        if not (package.loaded["pr_review"] and require("pr_review").open_thread()) then
+          vim.cmd("normal! " .. vim.v.count1 .. "+")
+        end
+      end,
+      { desc = "PR: open the comment thread on this line" },
+    },
+  })
   return {
     enhanced_diff_hl = true,
     use_icons = nerd,
+    file_panel = { win_config = { width = 45 } }, -- Java paths are long
     signs = not nerd and { fold_closed = "> ", fold_open = "v " } or nil, -- no icon: the name follows directly
-    hooks = { view_opened = remember_open_files, view_closed = close_files_opened_by },
+    hooks = {
+      view_opened = remember_open_files,
+      view_closed = function(closed)
+        close_files_opened_by(closed)
+        if package.loaded["pr_review"] then
+          require("pr_review").on_view_closed(closed)
+        end
+      end,
+      diff_buf_win_enter = function(buf, win, ctx)
+        if package.loaded["pr_review"] then
+          require("pr_review").on_diff_buf(buf, win, ctx)
+        end
+      end,
+    },
     keymaps = { view = view, file_panel = panel, file_history_panel = panel },
   }
 end
@@ -202,8 +250,7 @@ return {
     dependencies = { "nvim-lua/plenary.nvim", "folke/snacks.nvim" },
     keys = {
       { "<leader>gP", "<Cmd>Octo pr list<CR>", desc = "Pull requests" },
-      -- read-only; `\vs` in a PR starts a real review, which creates a pending review on GitHub right away
-      { "<leader>gV", "<Cmd>Octo review browse<CR>", desc = "Browse PR files side by side (PR tab or current branch)" },
+      { "<leader>gV", function() require("pr_review").open() end, desc = "Review the pull request (PR tab or current branch)" },
       { "<leader>gS", "<Cmd>Octo pr search<CR>", desc = "Search pull requests" },
       { "<leader>gN", "<Cmd>Octo notification list<CR>", desc = "GitHub notifications" },
     },
@@ -215,6 +262,22 @@ return {
           actions = {
             -- octo rejects an action without lhs, desc and mode, and then does not set itself up at all
             pull_requests = {
+              {
+                -- IntelliJ opens a pull request with its changed files; Ctrl+v / Ctrl+s open the description
+                name = "confirm",
+                lhs = "<CR>",
+                mode = { "n", "i" },
+                desc = "review pull request",
+                fn = function(picker, item, action)
+                  if not item then
+                    return
+                  elseif action and action.cmd then -- the split keys run `confirm` with a window command
+                    return Snacks.picker.actions.jump(picker, item, action)
+                  end
+                  picker:close()
+                  require("pr_review").open({ repo = item.repository.nameWithOwner, number = item.number })
+                end,
+              },
               {
                 name = "merge_pr",
                 lhs = "<C-r>",

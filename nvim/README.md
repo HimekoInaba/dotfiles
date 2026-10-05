@@ -108,10 +108,12 @@ The previous setup is saved in `~/.config/nvim-backup-2026-10-02/` (see its `REA
 | Open on GitHub | none | `Space g o` |
 | Commit window with side-by-side diff | Cmd+0, then Cmd+D | `Space g v` (again or `q` closes): `Tab` / `Shift+Tab` next / previous file, `-` stages, `X` rolls back (asks), `Space g t` hides the file list |
 | Compare branch with base (`origin/dev`) | Git log, Compare with branch | `Space g m` |
-| Resolve Conflicts (three panes) | merge dialog | `Space g v` during a merge: `]x` / `[x` next / previous conflict, `\co` ours, `\ct` theirs, `\cb` base, `\ca` all |
+| Resolve Conflicts (three panes) | merge dialog | `Space g v` during a merge: `]x` / `[x` next / previous conflict, `\xo` ours, `\xt` theirs, `\xb` base, `\xa` all |
 | Show History with diffs | VCS menu | `Space g H` (file), `Space g L` (branch) |
-| Pull Requests tool window | Cmd+Shift+A, Pull Requests | `Space g P` (search: `Space g S`, notifications: `Space g N`) |
-| Pull request files side by side | double-click a file in the PR | `Space g V` in a PR tab, or anywhere for the PR of the current branch |
+| Pull Requests tool window | Cmd+Shift+A, Pull Requests | `Space g P`, `Enter` opens the pull request: files tree, side-by-side diff, comments on their lines (search: `Space g S`, notifications: `Space g N`) |
+| Review the pull request of the current branch | Pull Requests, current branch | `Space g V` (also from a PR tab) |
+| Add a review comment | `+` in the diff gutter | `\ca` on the line or selection, `Ctrl+s` sends |
+| Submit Review | Submit button | `\vs`: Approve / Comment / Request changes |
 
 ### Tabs, windows, tool windows
 
@@ -142,19 +144,27 @@ Diff view (`Space g v` local changes, `Space g m` the branch against `origin/dev
 `Enter` or `Tab` / `Shift+Tab` shows one, `-` stages or unstages it, `X` rolls it back (asks), `Space e` focuses the list,
 `Space g t` hides it, `gf` opens the file in the editor, `g?` lists every key, `q` closes. The right side is the real file
 and can be edited there. Files it showed do not stay open as tabs. In the three-pane merge view the capital keys
-`\cO` `\cT` `\cB` `\cA` take one side for the whole file.
+`\xO` `\xT` `\xB` `\xA` take one side for the whole file.
 
-Pull requests: `Space g P`, `Enter` opens the PR in a tab (`Ctrl+b` opens the browser, `Ctrl+y` copies the link, `Ctrl+o`
-checks the branch out and `Ctrl+r` squash-merges; these two ask first). `Space g V` shows the PR's files side by side and
-changes nothing on GitHub: `]q` / `[q` next / previous file, `]t` / `[t` next / previous comment thread, `Ctrl+c` closes.
-In the PR tab every key starts with `\`: `\pd` plain diff, `\pf` changed files, `\ca` comment, `\cr` reply,
-`\rt` resolve thread, `\pa` approve, `Enter` lists all actions. A comment typed there is posted when you save it
-(`Ctrl+s`); autosave never posts.
+Pull requests open in that same diff view. `Space g P` lists them and `Enter` opens one: the changed files as a tree, the
+base on the left and the pull request on the right. Nothing is checked out. If the pull request's branch already is, the
+right side is the real file, with the language server. `Space g V` opens the pull request of the current branch, or of
+the PR tab you are in.
 
-`\vs` starts a review, which creates a pending review on GitHub right away (`\vr` resumes it). In its diff `\ca` comments
-on the line or selection, `\sa` suggests a change, `\Space` marks the file viewed, and `\vs` opens the submit window:
-`Ctrl+a` approves, `Ctrl+m` (also `Enter` in Normal mode) submits as a comment, `Ctrl+r` requests changes. `\vd` discards
-the review.
+- Review comments sit on their lines: a `●` in the margin and the start of the comment after the code. Rest the cursor on
+  the line to read the thread; `Enter` opens it: `r` reply, `x` resolve, `e` edit, `d` delete, `o` browser. `]t` / `[t`
+  jump between comments, `\cl` lists all of them, `\rt` resolves or reopens the one on the line.
+- `\ca` comments on the line, or on the selected lines: type, `Ctrl+s` sends, `q` in Normal mode cancels. GitHub only
+  takes comments on changed lines and the 3 lines around them.
+- Your comments stay pending, visible only to you, until `\vs` submits the review: Approve, Comment or Request changes,
+  with an optional summary. The header of the right pane counts them. `\vd` throws the pending review away.
+- `\pp` opens the description and conversation as an editor tab (from the list: `Ctrl+v` / `Ctrl+s`), `\pb` the browser,
+  `\vr` reloads the comments.
+- Comments on code that has changed since they were written are not in the diff. They are in the conversation.
+- In the list, `Ctrl+o` checks the branch out and `Ctrl+r` squash-merges; both ask first.
+
+The PR tab (description and conversation) is octo.nvim: `\ca` adds a comment to the conversation, which is posted when you
+save it (`Ctrl+s`), `\pa` approves, `Enter` lists all actions. Autosave never posts anything.
 
 Diff views and PR tabs are not reopened with the project.
 
